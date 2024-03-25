@@ -4,4 +4,4 @@
 
 コードの詳細は`codes_on_paper.ipynb`と各例`example*.ipynb`を参照されたい。
 
-Copyright (C) 2024  G W Duchesne, J-P Lessard and A Takayasu.
+Copyright (C) 2024  S Kondo and A Takayasu.
