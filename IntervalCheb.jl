@@ -117,7 +117,8 @@ function feval_parallel(f, t)
     fval = (zeros(length(t)))
     Threads.@threads for i = eachindex(t)
         tmp = f.(@view t[i])
-        fval[i] = abs(complex(sup(real(tmp)), sup(imag(tmp))))
+        # fval[i] = abs(complex(sup(real(tmp)), sup(imag(tmp))))
+        fval[i] = sup(abs(tmp))
     end
     return fval
 end
@@ -128,10 +129,10 @@ function truncCheb(ia, M)
     # return ia 
 end
 # 
-function fzeval(f, rho, div)
-    x = -1.0:div:1.0
+function fzeval(f, rho, divx, divr=divx)
+    x = -1.0:divx:1.0
     ix = interval.(x[1:end-1], x[2:end])
-    r = 0:div:1
+    r = 0:divr:1
     ir = interval.(r[1:end-1], r[2:end])
     iz = complex.(cospi.(ix), sinpi.(ix))
     ie = (interval(rho) * iz + interval(1) ./ (interval(rho) * iz)) ./ interval(2)
@@ -140,7 +141,7 @@ function fzeval(f, rho, div)
     return maximum(fiee)
 end
 # 
-function interval_cheb(f, I=[-1, 1]; ϵ=interval(2^-52), div=2^-3, tolerance=5e-15) # for general func
+function interval_cheb(f, I=[-1, 1]; ϵ=interval(2^-52), divx=2^-3, divr=divx, tolerance=5e-15) # for general func
     # a = cheb(f, I, tol=5e-12)
     a = cheb(f, I, tol=tolerance)
     # Special case odd/even function
@@ -168,7 +169,7 @@ function interval_cheb(f, I=[-1, 1]; ϵ=interval(2^-52), div=2^-3, tolerance=5e-
     i1 = interval(1)
     i2 = interval(2)
     g(ξ) = f((i1 - ξ) / i2 * I1 + (i1 + ξ) / i2 * I2)
-    fz = fzeval(g, rho, div) # Evaluate f(z)
+    fz = fzeval(g, rho, divx, divr) # Evaluate f(z)
     # Interpolation error via Bernstein ellipse is also in the zero mode
     err = (interval(4) * rho^(-(interval(M̃) - interval(1))) / (rho - interval(1))) * interval(fz)
     # midrad form of interval Cheb interpolation
@@ -234,22 +235,30 @@ function interval_cheb_complex(f, I=[-1, 1]; ϵ=interval(2^-52), div=2^-3) # for
     return ia
 end
 # 
-function chebint(a::Vector{Interval{T}}, I=[-1, 1]) where {T<:Real} # Input is Two-sided
-    M = length(a)
-    n = interval(Vector(0:2:M-1))
-    # @show sum(2*a[1:2:end]./(1.0 .- n.^2))*((I[2]-I[1])/2)
-    i2 = interval(2.0)
-    i1 = interval(1.0)
-    return sum(i2 * a[1:2:end] ./ (i1 .- n .^ i2)) * ((interval(I[2]) - interval(I[1])) / i2)
+function midrad!(ia)
+    ia[1] = interval(mid(ia[1]), sum(interval(radius.(ia))); format=:midpoint)
+    ia[2:end] = interval(mid.(ia[2:end]))
+    # return ia
 end
 # 
-function chebint(a::Vector{Complex{Interval{T}}}, I=[-1, 1]) where {T<:Real} # Input is Two-sided
-    M = length(a)
+function chebint(ia::Vector{Interval{T}}, I=[-1, 1]) where {T<:Real} # Input is Two-sided
+    midrad!(ia) # Transform ia to midrad form
+    M = length(ia)
     n = interval(Vector(0:2:M-1))
     # @show sum(2*a[1:2:end]./(1.0 .- n.^2))*((I[2]-I[1])/2)
     i2 = interval(2.0)
     i1 = interval(1.0)
-    return sum(i2 * a[1:2:end] ./ (i1 .- n .^ i2)) * ((interval(I[2]) - interval(I[1])) / i2)
+    return sum(i2 * ia[1:2:end] ./ (i1 .- n .^ i2)) * ((interval(I[2]) - interval(I[1])) / i2)
+end
+# 
+function chebint(ia::Vector{Complex{Interval{T}}}, I=[-1, 1]) where {T<:Real} # Input is Two-sided
+    midrad!(ia) # Transform ia to midrad form
+    M = length(ia)
+    n = interval(Vector(0:2:M-1))
+    # @show sum(2*a[1:2:end]./(1.0 .- n.^2))*((I[2]-I[1])/2)
+    i2 = interval(2.0)
+    i1 = interval(1.0)
+    return sum(i2 * ia[1:2:end] ./ (i1 .- n .^ i2)) * ((interval(I[2]) - interval(I[1])) / i2)
 end
 # 
 function chebindefint(ia::Vector{Interval{T}}, I=[-1, 1]) where {T<:Real} # Input is Two-sided (inverval)
@@ -353,11 +362,46 @@ function erf(iz::Complex{Interval{T}}) where {T<:Real}
 end
 ierf(z::Complex{T}) where {T<:Real} = erf(interval(z))
 # 
-function chebroots(ia::Vector{Interval{T}}, I=[-1, 1]) where {T<:Real}
-    I_lo = I[1]
-    I_up = I[2]
+# function chebroots(ia::Vector{Interval{T}}, I=[-1, 1]) where {T<:Real}
+#     I_lo = I[1]
+#     I_up = I[2]
 
-    n = length(ia)
+#     n = length(ia)
+#     du = [ones(n - 3) * 0.5; 1] # no error because there elements are power of 2
+#     dl = ones(n - 2) * 0.5 # no error because there elements are power of 2
+#     d = zeros(n - 1)
+
+#     C_1 = Tridiagonal(dl, d, du)
+#     iC_1 = interval(T, C_1)
+#     iC_2 = interval(T, zeros(n - 1, n - 1))
+#     iC_2[:, 1] = reverse(ia[1:end-1] / ia[n])
+#     iC_2 = interval(0.5) * iC_2
+#     iC = iC_1 - iC_2
+#     C = mid.(iC)
+
+#     lam, x = eigen(convert.(Float64, C))
+#     ε = 100 * eps() * (I_up - I_lo) * 0.5
+#     ind = findall((-1 - ε .≤ real(lam) .≤ 1 + ε) .& (imag(lam) .≈ 0))
+#     lam = real(lam[ind]) # Approximate zeros
+#     x = real(x[:, ind]) # Approximate eigenvector
+#     ilam = interval(T, zeros(length(lam)))
+
+#     for i = eachindex(lam)
+#         ilam[i] = verifyeig(iC, convert(T, lam[i]), convert.(T, x[:, i]))
+#     end
+
+#     if I_lo == -1.0 && I_up == 1.0
+#         return ilam
+#     else
+#         return (interval(1.0) .- ilam) .* interval(I_lo) / interval(2) + (interval(1.0) .+ ilam) .* interval(I_up) / interval(2)
+#     end
+# end
+include("IntervalFunctions.jl")
+function chebroots(ip::Vector{Interval{T}}, I=[-1, 1]) where {T<:Real}
+    I_lo = I[1]; I_up = I[2]
+    i1 = interval(1.0); i2 = interval(2.0)
+
+    n = length(ip)
     du = [ones(n - 3) * 0.5; 1] # no error because there elements are power of 2
     dl = ones(n - 2) * 0.5 # no error because there elements are power of 2
     d = zeros(n - 1)
@@ -365,26 +409,26 @@ function chebroots(ia::Vector{Interval{T}}, I=[-1, 1]) where {T<:Real}
     C_1 = Tridiagonal(dl, d, du)
     iC_1 = interval(T, C_1)
     iC_2 = interval(T, zeros(n - 1, n - 1))
-    iC_2[:, 1] = reverse(ia[1:end-1] / ia[n])
+    iC_2[:, 1] = reverse(ip[1:end-1] / ip[n])
     iC_2 = interval(0.5) * iC_2
     iC = iC_1 - iC_2
-    C = mid.(iC)
 
-    lam, x = eigen(convert.(Float64, C))
-    ε = 100 * eps() * (I_up - I_lo) * 0.5
-    ind = findall((-1 - ε .≤ real(lam) .≤ 1 + ε) .& (imag(lam) .≈ 0))
-    lam = real(lam[ind]) # Approximate zeros
-    x = real(x[:, ind]) # Approximate eigenvector
-    ilam = interval(T, zeros(length(lam)))
-
-    for i = eachindex(lam)
-        ilam[i] = verifyeig(iC, convert(T, lam[i]), convert.(T, x[:, i]))
-    end
-
-    if I_lo == -1.0 && I_up == 1.0
-        return ilam
+    X = eigvecs(mid.(iC))
+    allroots = verifyalleig(iC, X)
+    ε = maximum(radius,real(allroots))
+    # ε = 100 * eps() * (I_up - I_lo) * 0.5
+    if ε < 1e-3 # maximum tolerance for output
+        isinI = -1.0 - ε .<= inf.(real(allroots)) .&& sup.(real(allroots)) .<= 1.0 + ε
+        isreR = issubset_interval.(interval(0.0),imag(allroots))
+        ind = findall(isinI .&& isreR)
+        if I_lo==-1.0 && I_up==1.0
+            return real(allroots[ind])
+        else
+            ix = real(allroots[ind])
+            return (i1 .- ix[ind]).* I_lo/i2 + (i1 .+ ix[ind]).*I_up/i2
+        end
     else
-        return (interval(1.0) .- ilam) .* interval(I_lo) / interval(2) + (interval(1.0) .+ ilam) .* interval(I_up) / interval(2)
+        return NaN
     end
 end
 # 
@@ -399,68 +443,11 @@ function chebdiff(ia::Vector{Interval{T}}, I=[-1, 1]) where {T} # Input is Two-s
     return ib[1:end-2] * (interval(2) / (interval(I[2]) - interval(I[1]))) # Output is Two-sided (interval)
 end
 # 
-# 
-function verifyeig(iA::Matrix{Interval{T}}, lam, x, B=Matrix{T}(I, size(iA))) where {T<:Real}
-    if typeof(lam) <: Complex || eltype(x) <: Complex
-        lam = convert(Complex{T}, lam)
-        x = convert.(Complex{T}, Vector(x))
-    else
-        lam = convert(T, lam)
-        x = convert.(T, Vector(x))
-    end
-    x = x ./ norm(x)
-    ysize = length(x)
-    ilam = interval(lam)
-    ix = interval(x)
-    iB = interval(B)
-
-    function iDF(w)
-        mat = (zeros(typeof(ilam), length(w), length(w)))
-        mat[1, 2:end] = transpose(interval(2) * (ix + w[2:end]))
-        mat[2:end, 1] = -iB * (ix + w[2:end])
-        mat[2:end, 2:end] = iA - (ilam + w[1]) * iB
-        return mat
-    end
-    zero = zeros(T, ysize + 1)
-    R = inv(mid.(iDF(zero)))
-    iR = interval(R)
-    iz = -iR * [dot(ix, ix) - interval(1.0); iA * ix - ilam * iB * ix]
-    ϵ = 2 * sup(norm(iz, 1))
-    if isreal(lam) && isreal(x)
-        lam = real(lam)
-        x = real(x)
-        id = interval(0, ϵ; format=:midpoint)
-        iy = interval.(zeros(ysize), ϵ; format=:midpoint)
-        iI = interval(Matrix{T}(I, ysize + 1, ysize + 1))
-    else
-        id = Complex(interval(0, ϵ; format=:midpoint), interval(0, ϵ; format=:midpoint))
-        iy = Complex.(interval.(zeros(ysize), ϵ; format=:midpoint), interval.(zeros(ysize), ϵ; format=:midpoint))
-        iI = interval(Matrix{Complex{T}}(I, ysize + 1, ysize + 1))
-    end
-    iw = [id; iy]
-    g(w) = iz + (iI - iR * iDF(w)) * w
-    gw = g(iw)
-    if all(issubset_interval.(gw, iw)) #gw .⊂ iw
-        # while maximum(radius, gw) / norm([lam; x], 1) >= 1e3 * eps(T)
-        #     gw = g(gw)
-        # end
-        return ilam + gw[1] #, ix .+ gw[2:end] #固有ベクトルも返すようにする
-    else
-        return NaN
-    end
-end
-# 
 function endpoints_of_cheb(ia::Vector{Interval{T}}) where {T} # Input is two-sided Chebyshev
     n = length(ia)
     atm1 = dot(interval((-1) .^ (0:n-1)), ia) # endpoint at -1
     at1 = sum(ia) # endpoint at 1
     return [atm1, at1]
-end
-# 
-function midrad!(ia)
-    ia[1] = interval(mid(ia[1]), sum(interval(radius.(ia))); format=:midpoint)
-    ia[2:end] = interval(mid.(ia[2:end]))
-    # return ia
 end
 # 
 function chebmax(ia, I=[-1,1]) # Input is two-sided Chebyshev
@@ -474,7 +461,11 @@ function chebmax(ia, I=[-1,1]) # Input is two-sided Chebyshev
     fvals = [ep[1];fxc[1:end];ep[2]]
     ix = [-i1; ix; i1]
     ind = findall(isequal_interval.(fvals,maximum(fvals)))
-    return fvals[ind], (i1 .- ix[ind]).* I_lo/i2 + (i1 .+ ix[ind]).*I_up/i2
+    if isempty(ind)
+        return maximum(fvals)
+    else
+        return fvals[ind], (i1 .- ix[ind]).* I_lo/i2 + (i1 .+ ix[ind]).*I_up/i2
+    end
 end
 # 
 function chebmin(ia, I=[-1, 1]) # Input is two-sided Chebyshev
@@ -488,5 +479,9 @@ function chebmin(ia, I=[-1, 1]) # Input is two-sided Chebyshev
     fvals = [ep[1]; fxc[1:end]; ep[2]]
     ix = [-i1; ix; i1]
     ind = findall(isequal_interval.(fvals, minimum(fvals)))
-    return fvals[ind], (i1 .- ix[ind]).* I_lo/i2 + (i1 .+ ix[ind]).*I_up/i2
+    if isempty(ind)
+        return minimum(fvals)
+    else
+        return fvals[ind], (i1 .- ix[ind]).* I_lo/i2 + (i1 .+ ix[ind]).*I_up/i2
+    end
 end
