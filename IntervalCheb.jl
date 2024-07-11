@@ -281,7 +281,11 @@ function eval_interval_cheb(a::Vector{Interval{T}}, x, I=[-1, 1]) where {T<:Real
     I2 = interval(T,I[2])
     k = interval(T,Vector(0:M-1))
     ξ = interval(T,2) * (x .- I1) / (I2 - I1) .- interval(T,1)
-    return (cos.(k' .* acos.(ξ))*a)[1]
+    if length(x)==1
+        return (cos.(k' .* acos.(ξ))*a)[1]
+    else
+        return cos.(k' .* acos.(ξ))*a
+    end
 end
 # 
 import IntervalArithmetic: exp, sin, cos
