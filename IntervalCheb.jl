@@ -366,7 +366,7 @@ function erf(iz::Complex{Interval{T}}) where {T<:Real}
 end
 ierf(z::Complex{T}) where {T<:Real} = erf(interval(z))
 # 
-# function chebroots(ia::Vector{Interval{T}}, I=[-1, 1]) where {T<:Real}
+# function chebroots2(ia::Vector{Interval{T}}, I=[-1, 1]) where {T<:Real}
 #     I_lo = I[1]
 #     I_up = I[2]
 
@@ -429,7 +429,7 @@ function chebroots(ip::Vector{Interval{T}}, I=[-1, 1]) where {T<:Real}
             return real(allroots[ind])
         else
             ix = real(allroots[ind])
-            return (i1 .- ix[ind]).* I_lo/i2 + (i1 .+ ix[ind]).*I_up/i2
+            return (i1 .- ix).* I_lo/i2 + (i1 .+ ix).*I_up/i2
         end
     else
         return NaN
